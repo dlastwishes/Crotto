@@ -31,13 +31,19 @@ contract crottoGame{
     mapping(uint => mapping(uint => uint))  public numPlayerInRoomByType;
     mapping(uint => mapping(uint => mapping(uint => address))) public playerInRoomByType;
     mapping(uint => mapping(uint => address)) winnnerInRoomByType;
+    mapping(uint => mapping(uint => uint)) roomStateByType;
     
     //configuration
-    mapping(uint => uint) roomInRangeByType;
-    mapping(uint => uint) lengthRoomByType;
+    mapping(uint => uint) maximumPayByType;
     mapping(uint => uint) prizeByType;
     mapping(uint => uint) maxPointUseByType;
     mapping(uint => uint) balanceRoomByType;
+    
+    mapping(uint => uint) roomInRangeByType;
+    mapping(uint => uint) indexReadyRoomInRangeByType;
+    mapping(uint => uint) lengthRoomByType;
+    mapping(uint => uint) minLengthByType;
+    mapping(uint => uint) pointerRoomByType;
     
     uint faucet = 0;
     
@@ -88,25 +94,48 @@ contract crottoGame{
     
     function setDefaultGame() public onlyPlayable{
         roomInRangeByType[1] = 5;
+        maximumPayByType[1] = 0.003 ether;
+    }
+    
+    function initReadyRoom(uint roomType) internal {
+        if(lengthRoomByType[roomType] == uint(0)){
+            lengthRoomByType[roomType] = 0;
+            pointerRoomByType[roomType] = 0;
+        }
+        
+        for(uint i = lengthRoomByType[roomType]; i<= roomInRangeByType[roomType]; i++){
+            pointerRoomByType[roomType]++;
+            indexReadyRoomInRangeByType[i] = pointerRoomByType[roomType];
+        }
     }
     
     function getRandom(uint roomType) internal view returns (uint256) {
         
+        if(lengthRoomByType[roomType] <= minLengthByType[roomType]){
+            initReadyRoom(roomType);
+        }
         
         uint256 rand = uint256(uint256(keccak256(abi.encodePacked(msg.value, block.number, msg.sender))) % roomInRangeByType[roomType]) + 1;
         return rand;
     }
     
     function joinGame(uint roomType) public {
-        uint256 roomNo = getRandom(roomType);
+        require(msg.value >= maximumPayByType[roomType]);
+        
+        uint indexRoom = getRandom(roomType);
+        uint256 roomNo = indexReadyRoomInRangeByType[indexRoom];
+        
         if(numPlayerInRoomByType[roomType][roomNo] == uint(0)){
             numPlayerInRoomByType[roomType][roomNo] = 0;
+            roomStateByType[roomType][roomNo] = 1;
         }
+        
         numPlayerInRoomByType[roomType][roomNo] += 1;
         playerInRoomByType[roomType][roomNo][numPlayerInRoomByType[roomType][roomNo]] = msg.sender;
         
         if(numPlayerInRoomByType[roomType][roomNo] == 10){
-            deleteRoom(roomType, roomNo);
+            roomStateByType[roomType][roomNo] = 2;
+            deleteRoom(roomType, indexRoom);
         }
         emit join(roomNo);
     }
@@ -115,12 +144,19 @@ contract crottoGame{
         
     }
     
-    function chooseWinner(uint roomType, uint roomNo) internal returns(uint){
+    function getPoint(uint roomType, uint roomNo) public {
         
     }
     
-    function deleteRoom(uint roomType, uint roomNo){
+    //delete room
+    function deleteRoom(uint roomType, uint index){
+        if(lengthRoomByType[roomType] == 0) return;
         
+        for(uint i = index;i<=lengthRoomByType[roomType];i++){
+            indexReadyRoomInRangeByType[i] = indexReadyRoomInRangeByType[i+1];
+        }
+  
+        lengthRoomByType[roomType]--;
     }
     
 }
