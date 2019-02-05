@@ -27,23 +27,27 @@ contract crottoGame{
     bool private stopStatusFirst = false;
     
     //room info
-    mapping(uint => mapping(uint => uint)) roomSizeByType;
-    mapping(uint => mapping(uint => uint))  public numPlayerInRoomByType;
+    mapping(uint => uint) roomSizeByType;
+    mapping(uint => mapping(uint => uint)) public numPlayerInRoomByType;
     mapping(uint => mapping(uint => mapping(uint => address))) public playerInRoomByType;
     mapping(uint => mapping(uint => address)) winnnerInRoomByType;
     mapping(uint => mapping(uint => uint)) roomStateByType;
+    mapping(uint => uint) rewardPointByType;
     
     //configuration
     mapping(uint => uint) maximumPayByType;
     mapping(uint => uint) prizeByType;
-    mapping(uint => uint) maxPointUseByType;
     mapping(uint => uint) balanceRoomByType;
-    
     mapping(uint => uint) roomInRangeByType;
     mapping(uint => uint) indexReadyRoomInRangeByType;
     mapping(uint => uint) lengthRoomByType;
     mapping(uint => uint) minLengthByType;
     mapping(uint => uint) pointerRoomByType;
+    
+    // Calculate profit and prize
+    uint rateIncomeByType = 10;
+    mapping(uint => uint) maxPointUseByType;
+    mapping(uint => uint) ratePointByType;
     
     uint faucet = 0;
     
@@ -59,6 +63,17 @@ contract crottoGame{
     
     modifier onlyOwner(){
         require(msg.sender == owner);
+        _;
+    }
+    
+     // check that there is no contract in the middle
+    function isContract() internal view returns (bool) {
+        return msg.sender != tx.origin;
+    }
+    
+    // check that player is winner
+    modifier onlyWinner(uint roomType, uint roomNo){
+        require(winnnerInRoomByType[roomType][roomNo] == msg.sender);
         _;
     }
     
@@ -93,8 +108,12 @@ contract crottoGame{
     }
     
     function setDefaultGame() public onlyPlayable{
+        roomSizeByType[1] = 10;
         roomInRangeByType[1] = 5;
         maximumPayByType[1] = 0.003 ether;
+        ratePointByType[1] = 0;
+        rewardPointByType[1] = 100000000;
+        
     }
     
     function initReadyRoom(uint roomType) internal {
@@ -120,7 +139,9 @@ contract crottoGame{
     }
     
     function joinGame(uint roomType) public {
-        require(msg.value >= maximumPayByType[roomType]);
+        
+        //save player to lose money
+        require(msg.value == maximumPayByType[roomType]);
         
         uint indexRoom = getRandom(roomType);
         uint256 roomNo = indexReadyRoomInRangeByType[indexRoom];
@@ -140,12 +161,28 @@ contract crottoGame{
         emit join(roomNo);
     }
     
-    function getPrize(uint roomType, uint roomNo) public returns(bool){
+    function getPrize(uint roomType, uint roomNo) public onlyWinner(roomType, roomNo) returns(bool){
         
+        uint amountPrize = balanceRoomByType[roomType] - (balanceRoomByType[roomType] );
+        //send ETH to winner
+        msg.sender.transfer(prizeByType[roomType]);
+        
+        // change room state
+        roomStateByType[roomType][roomNo] = 4;
     }
     
+    //First player get a point reward and random player
     function getPoint(uint roomType, uint roomNo) public {
         
+        //get a point reward
+        crottoPoint.transfer(msg.sender, rewardPointByType[roomType]);
+        
+        //random player to win
+        uint randomPlayerNo = uint256(uint256(keccak256(abi.encodePacked(block.number, msg.sender))) % roomSizeByType[roomType] ) + 1;
+        winnnerInRoomByType[roomType][roomNo] = playerInRoomByType[roomType][roomNo][randomPlayerNo];
+        
+        //change room state
+        roomStateByType[roomType][roomNo] = 3;   
     }
     
     //delete room
